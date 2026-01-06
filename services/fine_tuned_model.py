@@ -10,7 +10,7 @@ import re
 logger = logging.getLogger(__name__)
 
 
-class LlamaModelService(ModelService):
+class FineTunedModel(ModelService):
     """
     Service for extracting requirements using a local Ollama model.
     """
@@ -29,7 +29,7 @@ class LlamaModelService(ModelService):
         Raises ModelServiceError on non-200 or parsing problems.
         """
         payload = {
-            "model": "llama3.2",
+            "model": "llama3.2", # Should change to llama3.2-3b-finetuned
             "prompt": prompt,
             "stream": False,
             "options": {

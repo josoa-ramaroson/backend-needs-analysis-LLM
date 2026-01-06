@@ -7,224 +7,123 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class ModelServiceError(Exception):
-    """Erreur générique pour ModelService."""
-    pass
-
-
-class JSONParseError(ModelServiceError):
-    """Erreur levée quand on ne parvient pas à parser du JSON."""
-    pass
-
-
-class SchemaValidationError(ModelServiceError):
-    """Erreur levée quand un item ne respecte pas le schéma attendu."""
-    pass
-
-
 class ModelService(ABC):
     """
     Classe abstraite qui définit le contrat des services de modèles (LLM).
-    Hériter et implémenter : load(), unload(), generate().
+    Hériter et implémenter : getRequirementAsJSON(), extract().
     """
+    # regex to accept model output lines to be parsed
 
-    PROMPT_TEMPLATE = (
-        "Tu es un agent d’extraction d’exigences. Règles :\n"
-        "1. Une exigence = besoin explicite ou implicite, fonctionnel ou non.\n"
-        "2. Décomposer les exigences (et implicites) si plusieurs dans un même paragraphe.\n"
-        "3. Reformuler clairement chaque exigence principale.\n"
-        "4. Fournir une courte description textuelle expliquant l'exigence.\n"
-        "5. Tu dois classifier chaque exigence en deux catégories :\n"
-        "   - fonctionnelle\n"
-        "   - non_fonctionnelle\n"
-        "6. La sortie DOIT être un JSON strictement valide, contenant une liste d'exigences. Chaque exigence doit contenir exactement les clés :\n"
-        "   exigence, description, type\n"
-        "   où type ∈ {{\"fonctionnelle\", \"non_fonctionnelle\"}}\n\n"
-        "IMPORTANT : **Tu DOIS répondre uniquement par un objet JSON valide**, sans texte additionnel.\n"
-        "IMPORTANT : **Tu DOIS extraire toutes les exigences**, et tu peux retourner plusieurs exigences principales.\n\n"
-        "Texte à analyser : {paragraph}\n"
+    REQ_LINE_RE = re.compile(
+        r"^\s*(REQ-[0-9A-Za-z_]+)\s*\|\s*(functional|non_functional)\s*\|\s*([^\|]{1,200})\s*\|\s*([^\|]{1,1000})\s*$",
+        re.IGNORECASE,
     )
 
-    # schéma minimal attendu pour chaque exigence
-    EXPECTED_KEYS = {"exigence", "description", "type"}
-    ALLOWED_TYPES = {"fonctionnelle", "non_fonctionnelle"}
+    PROMPT_TEMPLATE = """
+You are a Requirements Extraction Agent.
 
-    def __init__(self, model_id: str, device: str = "cpu"):
-        """
-        :param model_id: identifiant ou chemin du modèle
-        :param device: 'cpu' ou 'cuda' (ou autre, selon implémentation)
-        """
-        self.model_id = model_id
-        self.device = device
-        self._is_loaded = False
+GOAL:
+Extract every explicit or implicit requirement from the Text block below.
+A requirement can be functional or non-functional.
 
-    # ---- Méthodes abstraites à implémenter par chaque service ----
-    @abstractmethod
-    def load(self) -> None:
-        """
-        Charger le modèle en mémoire / initialiser les ressources.
-        Doit définir self._is_loaded = True si succès.
-        """
-        raise NotImplementedError
+OUTPUT FORMAT (strict):
+Each requirement must be on its own line and follow this exact format:
+REQ-XXX | functional | <title> | <description>
+or
+REQ-XXX | non_functional | <title> | <description>
 
-    @abstractmethod
-    def unload(self) -> None:
-        """
-        Libérer les ressources du modèle (GPU / fichiers / processus).
-        """
-        raise NotImplementedError
+Rules & constraints:
+1. Output EXACTLY one requirement per line.
+2. Use numeric IDs with 3 digits, e.g. REQ-001, REQ-002, ...
+   (If the model produces placeholders like REQ-XXX, they will be renumbered by the caller.)
+3. The <title> must be a short, single sentence summary (no pipes '|' inside).
+4. The <description> must expand the title in one or two sentences (no pipes '|' inside).
+5. Do NOT output any extra text, explanations, bullets, code blocks, or metadata.
+6. Do NOT repeat or echo the input Text.
+7. Answer in the SAME LANGUAGE as the Text.
 
-    @abstractmethod
-    def generate(self, prompt: str, max_new_tokens: int = 256, temperature: float = 0.0, **kwargs) -> str:
-        """
-        Générer la sortie textuelle du modèle à partir d'un prompt.
-        Retourne toujours une chaîne (raw text).
-        Implémentations possibles : transformers, vLLM, remote API...
-        """
-        raise NotImplementedError
+Example lines (do not include these in the output, they are only example formats):
+REQ-001 | functional | Authentificagion | Users must authenticate using email and password.
+REQ-002 | non_functional | Data encryption | All stored patient data must be encrypted using AES-256.
 
-    # ---- Helpers concrets réutilisables ----
-    def render_prompt(self, paragraph: str) -> str:
-        """Rendre le prompt final à partir du template."""
-        return self.PROMPT_TEMPLATE.format(paragraph=paragraph)
+TEXT:
+{document}
 
-    @staticmethod
-    def extract_json_block(raw: str) -> Optional[str]:
+INSTRUCTION: Extract ALL requirements and return ONLY the requirements list (one requirement per line) using the EXACT format above. Return an empty string if there is no requirement.
+""".strip()
+    def extract(self, document: str) -> str:
         """
-        Tenter d'extraire le premier bloc JSON trouvable dans la sortie brute.
-        Retourne la chaîne JSON ou None si non trouvée.
+        Comportement par défaut : renvoie le document inchangé.
+        Surcharger cette méthode dans une sous-classe pour appeler un LLM ou tout autre
+        pipeline d'extraction qui doit renvoyer un texte multiligne (une ligne = une requirement).
         """
-        # Recherche du premier '{' ... '}' correspondant. On utilise un parse simple.
-        match = re.search(r"(\{(?:.|\n)*\})", raw)
-        if match:
-            return match.group(1)
-        return None
+        return document
 
-    @staticmethod
-    def safe_json_load(s: str) -> Any:
+    def getRequierementAsJson(self, document: str) -> List[Dict[str, str]]:
         """
-        Charger JSON en gérant les erreurs avec messages clairs.
+        Convertit les exigences extraites en une liste de dictionnaires:
+        [
+        {"id": "REQ-001", "type": "functional", "title": "...", "description": "..."},
+        ...
+        ]
+
+        Cette méthode s'appuie sur self.extract(document) qui retourne les lignes
+        déjà renumérotées au format strict. Si certaines lignes ne correspondent
+        pas au regex strict, on tente une récupération simple via split("|").
         """
         try:
-            return json.loads(s)
-        except json.JSONDecodeError as e:
-            raise JSONParseError(f"JSON decode error: {e.msg} at pos {e.pos}")
+            extracted_text = self.extract(document)
+        except Exception as e:
+            logger.exception("Erreur lors de l'extraction des requirements: %s", e)
+            raise
 
-    def validate_item_schema(self, item: Dict[str, Any]) -> None:
-        """
-        Valide un item d'exigence basique :
-         - contient exactement les clés attendues
-         - 'type' appartient aux valeurs autorisées
-        Lève SchemaValidationError si invalide.
-        """
-        if not isinstance(item, dict):
-            raise SchemaValidationError("Item is not a JSON object")
+        results: List[Dict[str, str]] = []
 
-        keys = set(item.keys())
-        if keys != self.EXPECTED_KEYS:
-            raise SchemaValidationError(f"Item keys invalid. Expected {self.EXPECTED_KEYS}, got {keys}")
+        for line in extracted_text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
 
-        if not isinstance(item["exigence"], str) or not item["exigence"].strip():
-            raise SchemaValidationError("exigence must be a non-empty string")
+            m = getattr(self, "REQ_LINE_RE", None)
+            parsed = None
 
-        if not isinstance(item["description"], str):
-            raise SchemaValidationError("description must be a string")
+            if m:
+                match = m.match(line)
+                if match:
+                    req_id = match.group(1).upper()
+                    req_type = match.group(2).lower()
+                    title = match.group(3).strip()
+                    description = match.group(4).strip()
+                    parsed = (req_id, req_type, title, description)
 
-        if item["type"] not in self.ALLOWED_TYPES:
-            raise SchemaValidationError(f"type must be one of {self.ALLOWED_TYPES}")
-
-    # ---- Méthode de haut niveau fournie ----
-    def extract_requirements(self, paragraph: str, retries: int = 1, strict: bool = True) -> List[Dict[str, Any]]:
-        """
-        Pipeline de génération + parsing + validation.
-
-        :param paragraph: texte à analyser
-        :param retries: nombre de réessais si JSON invalide (par ex. rappeler generate avec instructions de correction)
-        :param strict: si True, lève une exception si validation échoue; sinon retourne ce qui a pu être parsé
-        :return: liste d'exigences (list[dict])
-        """
-        if not self._is_loaded:
-            raise ModelServiceError("Model not loaded. Call load() before extract_requirements().")
-
-        prompt = self.render_prompt(paragraph)
-        raw = self.generate(prompt)
-
-        # 1) essai direct parse
-        try:
-            parsed = self.safe_json_load(raw)
-        except JSONParseError:
-            # 2) essayer d'extraire un bloc JSON et parser
-            json_block = self.extract_json_block(raw)
-            if json_block:
-                try:
-                    parsed = self.safe_json_load(json_block)
-                except JSONParseError as e:
-                    logger.warning("Échec du parse après extraction de bloc JSON: %s", e)
-                    parsed = None
-            else:
-                parsed = None
-
-        # 3) si parsing impossible -> retries (demander au modèle de corriger la sortie)
-        attempt = 0
-        while parsed is None and attempt < retries:
-            attempt += 1
-            logger.info("Retrying generation to obtain valid JSON (attempt %d/%d)", attempt, retries)
-            # On demande explicitement au modèle de renvoyer uniquement du JSON
-            repair_prompt = (
-                "Votre dernière réponse n'était pas un JSON valide. "
-                "Réponds uniquement par un JSON strictement valide qui correspond au schéma : "
-                f"{list(self.EXPECTED_KEYS)}. "
-                "Corrige uniquement le JSON, sans autre texte.\n\n"
-                f"Texte à analyser : {paragraph}\n"
-            )
-            raw_retry = self.generate(repair_prompt)
-            # try parse retry
-            try:
-                parsed = self.safe_json_load(raw_retry)
-            except JSONParseError:
-                json_block = self.extract_json_block(raw_retry)
-                if json_block:
-                    try:
-                        parsed = self.safe_json_load(json_block)
-                    except JSONParseError:
-                        parsed = None
+            if parsed is None:
+                # Fallback: try to split by '|' and recover fields
+                parts = [p.strip() for p in line.split("|")]
+                if len(parts) >= 4 and parts[0].upper().startswith("REQ"):
+                    req_id = parts[0].upper()
+                    req_type = parts[1].lower()
+                    title = parts[2]
+                    description = parts[3]
+                    parsed = (req_id, req_type, title, description)
                 else:
-                    parsed = None
+                    # ignore non-conforming line
+                    logger.debug("Ignored non-conforming line while parsing to JSON: %s", line[:200])
+                    continue
 
-        if parsed is None:
-            msg = "Impossible d'obtenir un JSON valide depuis le modèle."
-            if strict:
-                raise JSONParseError(msg)
+            req_id, req_type, title, description = parsed
+            # Normaliser le type si besoin
+            if req_type in ("non-functional", "non functional"):
+                req_type = "non_functional"
+            elif req_type == "non_functional":
+                pass
             else:
-                logger.warning(msg)
-                # retourner ce qu'on a (vide)
-                return []
+                req_type = "functional" if "functional" in req_type else req_type
 
-        # 4) normalize parsed -> should be list of exigences
-        if isinstance(parsed, dict):
-            # si le modèle renvoie {"exigences": [...] } ou similaire
-            if "exigences" in parsed and isinstance(parsed["exigences"], list):
-                items = parsed["exigences"]
-            else:
-                # peut-être un seul item (dict) -> wrap
-                items = [parsed]
-        elif isinstance(parsed, list):
-            items = parsed
-        else:
-            if strict:
-                raise SchemaValidationError("Parsed JSON has unexpected top-level type")
-            else:
-                return []
+            results.append({
+                "id": req_id,
+                "type": req_type,
+                "title": title,
+                "description": description
+            })
 
-        # 5) validate each item
-        validated_items: List[Dict[str, Any]] = []
-        for item in items:
-            try:
-                self.validate_item_schema(item)
-                validated_items.append(item)
-            except SchemaValidationError as e:
-                logger.warning("Item schema invalid: %s; item=%s", e, item)
-                if strict:
-                    raise
-
-        return validated_items
+        return results
