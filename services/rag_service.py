@@ -9,8 +9,7 @@ from sentence_transformers import SentenceTransformer
 from sentence_transformers.cross_encoder import CrossEncoder
 from sklearn.metrics.pairwise import cosine_similarity
 
-from model_service import ModelService
-from llama_model_service import LlamaModelService
+from services.model_service import ModelService
 import logging
 logger = logging.getLogger(__name__)
 
@@ -20,15 +19,16 @@ class RAGService(ModelService):
     def __init__(
                     self, 
                     llm_service,
-                    #embed_model_name="sentence-transformers/all-mpnet-base-v2",
+                    embed_model_name="sentence-transformers/all-mpnet-base-v2",
                     #embed_model_name="intfloat/e5-large",
                     #embed_model_name="nomic-ai/nomic-embed-text-v1.5",
-                    embed_model_name="Qwen/Qwen3-Embedding-0.6B",
-                    crossencoder_name="mixedbread-ai/mxbai-rerank-base-v2"
-                    #crossencoder_name="cross-encoder/ms-marco-MiniLM-L-12-v2"
+                    #embed_model_name="Qwen/Qwen3-Embedding-0.6B",
+                    crossencoder_name="cross-encoder/ms-marco-MiniLM-L-12-v2"
+                    #crossencoder_name="mixedbread-ai/mxbai-rerank-base-v2"
                     #crossencoder_name="cross-encoder/stsb-roberta-large"
                     #crossencoder_name="cross-encoder/ms-marco-MiniLM-L-6-v2"
                     ):
+        logger.info("----RAG initialization---")
         self.llm_service = llm_service
         self.embed_model = SentenceTransformer(embed_model_name, trust_remote_code=True)
         self.cross_encoder = CrossEncoder(crossencoder_name)
@@ -192,6 +192,7 @@ class RAGService(ModelService):
 
     def build_prompt(self, document):
         return self.PROMPT_TEMPLATE.format(document=document)
+    
     def extract(self, document: str):
         query = "give all explicit and implicit requirements and constraints for this project, functional requirements, non-functional requirements (performance, security, reliability, scalability)"
         passages_results = self.retrieve_top_passages(document, query,
@@ -205,84 +206,3 @@ class RAGService(ModelService):
         llm_response = self.llm_service._call(prompt)
         print(llm_response)
         return llm_response
-
-#testing
-text_doc = """
-Gianah (Analyste des besoins) :
-“Hello everyone! My name is Gianah, and I’m the Business Analyst for this project. I will be guiding
-our meeting today.
-We are here because we want to build a mobile app for the university library. This app will help
-students and staff use the library services in a better way.
-Before we start talking about the app, I want to introduce you to the team. Each person here has a
-special role to play in this project. Let’s meet them now.”
-Manampy (Étudiant):
-“Hi, my name is Manampy.
-I am here to represent the students who will use this app every day. I will
-share what students need and expect from the app.”
-Benjamina (Bibliothécaire):
-“Hello, I’m Ms. Benjamina. I am the head librarian.
-My job is to manage the lending and returning of books. I make sure everything works well for both the
-library staff and the students.”
-Rado (Responsable pédagogique) :
-“Hello, I’m Mr. Rado.
-My role is to make sure the app meets the needs of teachers and students when
-it comes to their learning and teaching.”
-Nambinintsoa (Responsable informatique ):
-“Hello, my name is Nambinintsoa.
-I am the IT manager.
-I will make sure the app works well with our current computer systems. I will also make sure it is safe
-and easy to use.”
-Gianah (Analyste des besoins) :
-“Thank you all for the introductions.Now that we know who everyone is and their role, let’s start our discussion about the app.
-Our goal is to understand what each of you expects from the app. We want to know what you need, and
-what problems or limits we should keep in mind.
-Manampy, let’s begin with you. What do you think students need most from this app?”
-Manampy (Étudiant):
-“Thank you, Gianah. For students, the most important thing is to be able to search the library catalog
-from our phones.
-This means we can see if books are available without going to the library. That saves time.
-It would also be very helpful to be able to reserve books directly from the app, especially during exams
-when we are very busy.
-I would like the app to send me notifications before the due date so I don’t forget to return the books on
-time.
-Lastly, it would be great if I can extend the loan for a book using the app, so I don’t have to go to the
-library just to ask for more time.”
-Benjamina (Bibliothécaire):
-“For us in the library, the biggest problem is answering many questions about whether a book is
-available.
-If students can check this on their own using the app, it will help us a lot.
-We also want the reservation process to be automatic, so it is easier to manage the loans.
-A QR code scanner in the app would help us quickly record when books are borrowed or returned. This
-will reduce mistakes.
-But we need to make sure that students can only extend a loan if nobody else has reserved the book
-after them.”
-Rado (Responsable pédagogique) :
-“I think this app can help with learning, too.
-It would be good if teachers could suggest books related to their courses inside the app.This way, students will know which books are important for their classes.
-We could also have lists of books by subjects or by semester to make it easier to find what you need.”
-Nambinintsoa (Responsable informatique ):
-“From a technical side, the app will need to connect to our library system called KohaTek. It will use
-something called an API to get live information about books and users.
-Security is very important. Students and staff will log in using their university usernames and
-passwords.
-To reach many people, it is best to build a hybrid app. That means it will work on both Android phones
-and iPhones.
-We will also add notifications to remind users about due dates, and make sure the app works well with
-QR code scanning inside the library.”
-Gianah (Analyste des besoins) :
-“Thank you all for sharing your ideas and needs.
-Let me quickly summarize the main points we talked about today:**
-• Students want to search and browse the catalog on their phones.
-• They want to reserve books and extend loans through the app.
-• The app should send reminders to avoid late returns.
-• QR code scanning will make loans and returns faster.
-• Teachers can suggest books related to their courses.
-• The app must have secure login with university accounts.
-• The app will work on both Android and iOS and connect to KohaTek.
-“Our next step is to write down these needs clearly and start designing the first version of the app.
-Thank you all for your time and help. Working together will make this project a success!”
-"""
-llama_model_service = LlamaModelService()
-rag_service = RAGService(llama_model_service)
-result = rag_service.getRequierementAsJson(text_doc)
-print(result)

@@ -7,4 +7,6 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     model_id: str
-    saved_filename: str = ""
+    file_url: str = ""
+    uid: str
+    timestamp: str

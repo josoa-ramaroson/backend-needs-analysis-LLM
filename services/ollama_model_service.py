@@ -1,27 +1,23 @@
 
-from typing import Any, Optional, List, Set, Dict
-from model_service import ModelService
-from model_service_error import ModelServiceError
+from typing import Any, List, Set, Dict
+from services.model_service import ModelService
+from services.model_service_error import ModelServiceError
 import logging
-import os
 import requests
 import re
 
 logger = logging.getLogger(__name__)
 
 
-class FineTunedModel(ModelService):
+class OllamaModelService(ModelService):
     """
     Service for extracting requirements using a local Ollama model.
     """
 
-    # Default to local Ollama endpoint if env var is not set
-    OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
-
-    def __init__(self, ollama_url: Optional[str] = None) -> None:
-        if ollama_url:
-            self.OLLAMA_URL = ollama_url
-       
+  
+    def __init__(self, ollama_url: str, model_id) -> None:
+        self.OLLAMA_URL = ollama_url
+        self.MODEL_ID = model_id
 
     def _call(self, prompt: str) -> str:
         """
@@ -29,7 +25,7 @@ class FineTunedModel(ModelService):
         Raises ModelServiceError on non-200 or parsing problems.
         """
         payload = {
-            "model": "llama3.2", # Should change to llama3.2-3b-finetuned
+            "model": self.MODEL_ID,
             "prompt": prompt,
             "stream": False,
             "options": {
