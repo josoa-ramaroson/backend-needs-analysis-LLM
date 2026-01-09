@@ -23,7 +23,7 @@ file_service = FileService(FILE_DIR)
 
 # instantiate simple model services (for a production app prefer startup events)
 llama_service = OllamaModelService(OLLAMA_URL, "llama3.2")
-fine_tuned_llama = OllamaModelService(OLLAMA_URL, "llama3.2")
+fine_tuned_llama = OllamaModelService(OLLAMA_URL, "llama3.2-3b-finetuned")
 rag_service = RAGService(llama_service)
 
 chat_db_service = TinyDBService(DB_FILE_NAME, MESSAGE_COLLECTION_NAME)
@@ -125,7 +125,7 @@ async def extract_requirements(
     except Exception as exc:
         logger.exception("Error serializing model result to JSON")
         raise HTTPException(status_code=500, detail=f"Result serialization failed: {exc}")
-    print(str(saved_path))  
+     
     # build a user-facing file_url (returning saved path here; adapt if you have a static server)
     file_url = str(saved_path)
     chat_db_service.store({
