@@ -51,7 +51,7 @@ def clean_sentence_simple(sentence: str) -> str:
 
     return s
 # char_length 15 000 is an approximation of characters equivalent to 4096 token
-def chunk_by_sentences(document: str, char_length: int = 15000):
+def chunk_by_sentences(document: str, char_length: int = 18000):
     chunks = []
     current_chunk = ""
     sentences = document.split(".")
