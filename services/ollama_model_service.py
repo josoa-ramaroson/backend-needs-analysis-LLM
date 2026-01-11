@@ -75,9 +75,10 @@ def chunk_by_sentences(document: str, chunk_size: int = 600):
     if current_chunk:
         chunks.append(current_chunk.strip())
 
+    #logging info
+    logger.warn(f"Length of chunking : {len(chunk)}")
     return chunks
 
-logger = logging.getLogger(__name__)
 
 
 class OllamaModelService(ModelService):
