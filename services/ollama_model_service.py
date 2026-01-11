@@ -50,8 +50,8 @@ def clean_sentence_simple(sentence: str) -> str:
     s = s.strip()
 
     return s
-
-def chunk_by_sentences(document: str, chunk_size: int = 1000):
+# char_length 15 000 is an approximation of characters equivalent to 4096 token
+def chunk_by_sentences(document: str, char_length: int = 15000):
     chunks = []
     current_chunk = ""
     sentences = document.split(".")
@@ -64,7 +64,7 @@ def chunk_by_sentences(document: str, chunk_size: int = 1000):
         sentence_with_dot = sentence + "."
 
         # 🔹 3) Gestion de la taille des chunks
-        if len(current_chunk) + len(sentence_with_dot) > chunk_size:
+        if len(current_chunk) + len(sentence_with_dot) > char_length:
             if current_chunk:
                 chunks.append(current_chunk.strip())
                 logger.debug("New chunk created (%d chars)", len(current_chunk))
