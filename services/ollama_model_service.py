@@ -51,7 +51,7 @@ def clean_sentence_simple(sentence: str) -> str:
 
     return s
 
-def chunk_by_sentences(document: str, chunk_size: int = 170):
+def chunk_by_sentences(document: str, chunk_size: int = 600):
     chunks = []
     current_chunk = ""
     sentences = document.split(".")
