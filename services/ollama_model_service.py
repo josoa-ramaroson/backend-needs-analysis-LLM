@@ -76,7 +76,7 @@ def chunk_by_sentences(document: str, chunk_size: int = 600):
         chunks.append(current_chunk.strip())
 
     #logging info
-    logger.warn(f"Length of chunking : {len(chunk)}")
+    logger.warn(f"Length of chunking : {len(chunks)}")
     return chunks
 
 
