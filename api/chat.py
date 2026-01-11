@@ -24,7 +24,7 @@ file_service = FileService(FILE_DIR)
 # instantiate simple model services (for a production app prefer startup events)
 llama_service = OllamaModelService(OLLAMA_URL, "llama3.2")
 fine_tuned_llama = OllamaModelService(OLLAMA_URL, "llama3.2-3b-finetuned")
-rag_service = RAGService(llama_service)
+rag_service = RAGService(fine_tuned_llama)
 
 chat_db_service = TinyDBService(DB_FILE_NAME, MESSAGE_COLLECTION_NAME)
 model_list_service = {

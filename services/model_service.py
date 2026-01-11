@@ -19,38 +19,40 @@ class ModelService(ABC):
         re.IGNORECASE,
     )
 
-    PROMPT_TEMPLATE = """
-You are a Requirements Extraction Agent.
+    PROMPT_TEMPLATE = """TASK: is to extract all functional and non-functional requirements from a document and reformulate them clearly, concisely, and accurately. The text below is part of a discussion or a document about a project.
+IMPORTANT: the provided TEXT may be split into short sentences (the document has been split by sentence). You must consider adjacent sentences together when necessary to detect implicit or multi-sentence requirements.
 
 GOAL:
-Extract every explicit or implicit requirement from the Text block below.
+Extract every explicit or implicit requirement from the TEXT block below.
 A requirement can be functional or non-functional.
 
 OUTPUT FORMAT (strict):
 Each requirement must be on its own line and follow this exact format:
-REQ-XXX | functional | <title> | <description>
+<IDS> | functional | <title> | <description>
 or
-REQ-XXX | non_functional | <title> | <description>
-
-Rules & constraints:
-1. Output EXACTLY one requirement per line.
-2. Use numeric IDs with 3 digits, e.g. REQ-001, REQ-002, ...
-   (If the model produces placeholders like REQ-XXX, they will be renumbered by the caller.)
-3. The <title> must be a short, single sentence summary (no pipes '|' inside).
-4. The <description> must expand the title in one or two sentences (no pipes '|' inside).
-5. Do NOT output any extra text, explanations, bullets, code blocks, or metadata.
-6. Do NOT repeat or echo the input Text.
-7. Answer in the SAME LANGUAGE as the Text.
-
-Example lines (do not include these in the output, they are only example formats):
-REQ-001 | functional | Authentificagion | Users must authenticate using email and password.
+<IDS> | non_functional | <title> | <description>
+Rules & constraints (must be followed exactly):
+1. Output EXACTLY one requirement per line. Do NOT add any surrounding text, headings, code fences, or explanation.
+2. Use numeric <IDS> with 3 digits, starting at REQ-001 and incrementing by 1 (REQ-001, REQ-002, ...).
+3. The <title> must be a short, single sentence (no '|' characters). Keep it concise (6–12 words recommended). Do NOT include trailing periods.
+4. The <description> should be a short paragraph (1–2 sentences) clarifying the requirement.
+5. Keep single spaces around the pipe separator: `"REQ-001 | functional | Title | Description"`.
+6. Answer in the SAME LANGUAGE as the TEXT.
+7. Merge duplicates: if the same requirement appears multiple times, return it only once.
+8. If a requirement is implicit, infer it but mark it as functional or non_functional according to intent (do not invent unrelated features).
+9. Write the <title> and <description> in the SAME LANGUAGE as the TEXT. 
+   Example (English): write the title and description in English. 
+   If the text is French, write the title and description in French.
+10. Do NOT return anything other than the lines described above. Do not add any explanation.
+Examples of valid lines (for format only — do not include these lines in output):
+REQ-001 | functional | User login | Users must authenticate using email and password.
 REQ-002 | non_functional | Data encryption | All stored patient data must be encrypted using AES-256.
-
+REQ-003 | functional | Mobile application version | The system must provide a mobile application version compatible with Android and iOS devices.
+INSTRUCTION: Extract ALL requirements and return ONLY the requirements list using the EXACT format above.
 TEXT:
 {document}
-
-INSTRUCTION: Extract ALL requirements and return ONLY the requirements list (one requirement per line) using the EXACT format above. Return an empty string if there is no requirement.
 """.strip()
+
     def extract(self, document: str) -> str:
         """
         Comportement par défaut : renvoie le document inchangé.
@@ -74,7 +76,7 @@ INSTRUCTION: Extract ALL requirements and return ONLY the requirements list (one
         try:
             extracted_text = self.extract(document)
         except Exception as e:
-            logger.exception("Erreur lors de l'extraction des requirements: %s", e)
+            logger.exception("Error during model call: %s", e)
             raise
 
         results: List[Dict[str, str]] = []

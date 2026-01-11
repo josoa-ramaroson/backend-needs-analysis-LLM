@@ -5,6 +5,77 @@ from services.model_service_error import ModelServiceError
 import logging
 import requests
 import re
+import unicodedata
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def clean_sentence_simple(sentence: str) -> str:
+    """
+    Very small sanitizer:
+     - remove CR (\r)
+     - replace tabs with single space
+     - collapse sequences of 3+ dots into '...'
+     - remove most junk characters (keeps word chars, whitespace and common punctuation)
+     - collapse multiple newlines into one newline
+     - collapse multiple spaces into one space
+     - strip leading/trailing whitespace on each line and overall
+    """
+    if not sentence:
+        return ""
+
+    # 1) Basic normalisation of control chars
+    s = sentence.replace("\r", "")
+    s = s.replace("\t", " ")
+
+    # 2) Collapse long sequences of dots (3 or more) into '...'
+    s = re.sub(r"\.{3,}", ".", s)
+
+    # 3) Remove undesirable characters.
+    # Keep:
+    #   \w   : unicode word characters (letters incl. accents, digits, underscore)
+    #   \s   : whitespace (spaces, tabs already converted, newlines)
+    #   common punctuation: . , ? ! ; : ' " - ( ) [ ] { } / % @ &
+    s = re.sub(r"[^\w\s\.,\?\!\;\:\'\"\-\(\)\[\]\{\}\/%@&]", "", s)
+
+    # 4) Collapse multiple newlines into a single newline
+    s = re.sub(r"\n{2,}", "\n", s)
+
+    # 5) Collapse multiple spaces into one
+    s = re.sub(r"[ ]{2,}", " ", s)
+
+    # 6) Trim spaces at start/end of each line, and overall
+    s = "\n".join(line.strip() for line in s.split("\n"))
+    s = s.strip()
+
+    return s
+
+def chunk_by_sentences(document: str, chunk_size: int = 170):
+    chunks = []
+    current_chunk = ""
+    sentences = document.split(".")
+
+    for sentence in sentences:
+        sentence = clean_sentence_simple(sentence)
+        if not sentence:
+            continue
+
+        sentence_with_dot = sentence + "."
+
+        # 🔹 3) Gestion de la taille des chunks
+        if len(current_chunk) + len(sentence_with_dot) > chunk_size:
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+                logger.debug("New chunk created (%d chars)", len(current_chunk))
+            current_chunk = sentence_with_dot
+        else:
+            current_chunk += " " + sentence_with_dot if current_chunk else sentence_with_dot
+
+    if current_chunk:
+        chunks.append(current_chunk.strip())
+
+    return chunks
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +97,12 @@ class OllamaModelService(ModelService):
         """
         payload = {
             "model": self.MODEL_ID,
+            "system": "You are a project manager. Always answer in plain text. Do not use Markdown, lists, bullet points, or formatting.",
             "prompt": prompt,
             "stream": False,
             "options": {
-                "temperature": 0.0,
-                "top_p": 0.2
+                "temperature": 0.1,
+                "top_p": 0.9
             }
         }
 
@@ -90,14 +162,8 @@ class OllamaModelService(ModelService):
         if not document or not document.strip():
             raise ModelServiceError("Empty document provided for extraction.")
 
-        lines = document.splitlines()
-        chunk_size = 100
-        chunks: List[str] = []
-        for i in range(0, len(lines), chunk_size):
-            chunk = "\n".join(lines[i : i + chunk_size]).strip()
-            if chunk:
-                chunks.append(chunk)
-
+        chunks = chunk_by_sentences(document)
+        #print(chunks)
         collected_reqs: List[tuple] = []  # list of tuples (type, title, desc)
         seen_signatures: Set[str] = set()
 
@@ -106,6 +172,7 @@ class OllamaModelService(ModelService):
             logger.debug("Processing chunk %d/%d (len=%d lines)", idx, len(chunks), len(chunk.splitlines()))
 
             raw = self._call(prompt)
+            #print("raw: ", raw)
             logger.debug("Raw model output (first 500 chars): %s", raw[:500])
 
             # Split into lines and parse requirement lines
