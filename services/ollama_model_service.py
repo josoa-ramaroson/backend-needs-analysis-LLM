@@ -50,8 +50,8 @@ def clean_sentence_simple(sentence: str) -> str:
     s = s.strip()
 
     return s
-# char_length 15 000 is an approximation of characters equivalent to 4096 token
-def chunk_by_sentences(document: str, char_length: int = 18000):
+# char_length 25 000 is an approximation of characters equivalent to 4096 token
+def chunk_by_sentences(document: str, char_length: int = 25000):
     chunks = []
     current_chunk = ""
     sentences = document.split(".")

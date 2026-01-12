@@ -38,3 +38,58 @@ class TinyDBService:
             condition = expr if condition is None else condition & expr
 
         return self.table.search(condition)
+    
+    def update_field(
+        self,
+        filters: Dict[str, Any],
+        field: str,
+        value: Any
+    ) -> int:
+        """
+        Update a single field for documents matching filters.
+        Returns number of updated documents.
+        """
+        q = Query()
+        condition = None
+        for k, v in filters.items():
+            expr = (q[k] == v)
+            condition = expr if condition is None else condition & expr
+
+        return self.table.update({field: value}, condition)
+
+    def update(
+        self,
+        filters: Dict[str, Any],
+        updates: Dict[str, Any]
+    ) -> int:
+        """
+        Update multiple fields for documents matching filters.
+        Returns number of updated documents.
+        """
+        q = Query()
+        condition = None
+        for k, v in filters.items():
+            expr = (q[k] == v)
+            condition = expr if condition is None else condition & expr
+
+        return self.table.update(updates, condition)
+
+    def delete(self, filters: Dict[str, Any]) -> int:
+        """
+        Delete documents matching filters.
+        Returns number of deleted documents.
+        """
+        q = Query()
+        condition = None
+        for k, v in filters.items():
+            expr = (q[k] == v)
+            condition = expr if condition is None else condition & expr
+
+        return self.table.remove(condition)
+        
+    def delete_by_id(self, doc_id: int) -> bool:
+        """
+        Delete a document by its TinyDB doc_id.
+        Returns True if deleted.
+        """
+        return bool(self.table.remove(doc_ids=[doc_id]))
