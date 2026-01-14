@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 # --- configuration / services (kept simple) ---
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
-DB_FILE_NAME = "messages.json"
+DB_FILE_NAME = "database.json"
 MESSAGE_COLLECTION_NAME = "bot_messages"
 FILE_DIR = "static/docs"
 

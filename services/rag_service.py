@@ -88,6 +88,7 @@ class RAGService(ModelService):
         scores = bm25.get_scores(q_tokens)  # numpy array
         top_idx = np.argsort(scores)[::-1][:top_n]
         return [(int(i), float(scores[i])) for i in top_idx]
+        
     def dense_rerank(self, 
                     query: str,
                     candidates: List[Dict],

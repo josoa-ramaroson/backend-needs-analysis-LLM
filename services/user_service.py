@@ -59,6 +59,22 @@ class UserService:
         stored_hash = registered_data[0].get("password")
         return self.verify_password(user_data["password"], stored_hash)
 
+    def get_user(self, uid: str) -> Dict[str, Any] | None:
+        """
+        Get user information by UID.
+        Password is excluded from the returned data.
+        Returns None if user does not exist.
+        """
+        result = self.db_service.query({"uid": uid})
+
+        if not result:
+            return None
+
+        user = result[0].copy()
+        user.pop("password", None)  # never expose password
+
+        return user
+
     def delete_user(self, user_id: str) -> int:
         """
         Delete a user by UID.
